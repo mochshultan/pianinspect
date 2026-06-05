@@ -175,6 +175,9 @@ class AudioEngine {
         this.audioCtx = null;
         this.analyser = null;
         this.mediaStream = null;
+        this.inputMode = 'mic';
+        this.wavBuffer = null;
+        this.wavSourceNode = null;
 
         this.hold = {};
         this.accum = {};
@@ -189,19 +192,14 @@ class AudioEngine {
         this.freqHist = {};
     }
 
+    setWavBuffer(buffer) {
+        this.wavBuffer = buffer || null;
+        this.inputMode = this.wavBuffer ? 'wav' : 'mic';
+    }
+
     async start() {
         try {
-            this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false
-                }
-            });
-
-            // Turunkan sampleRate untuk meningkatkan kerapatan FFT bin (HiFi/High Res)
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-            const source = this.audioCtx.createMediaStreamSource(this.mediaStream);
 
             const hpFilter = this.audioCtx.createBiquadFilter();
             hpFilter.type = 'highpass';
@@ -214,6 +212,27 @@ class AudioEngine {
             this.analyser = this.audioCtx.createAnalyser();
             this.analyser.fftSize = 32768;
             this.analyser.smoothingTimeConstant = 0.0;
+
+            let source;
+            if (this.inputMode === 'wav') {
+                if (!this.wavBuffer) {
+                    throw new Error('No recorded WAV file loaded.');
+                }
+                source = this.audioCtx.createBufferSource();
+                source.buffer = this.wavBuffer;
+                source.loop = true;
+                this.wavSourceNode = source;
+                source.start(0);
+            } else {
+                this.mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
+                source = this.audioCtx.createMediaStreamSource(this.mediaStream);
+            }
 
             source.connect(hpFilter);
             hpFilter.connect(lpFilter);
@@ -231,8 +250,15 @@ class AudioEngine {
 
     stop() {
         this.run = false;
+        if (this.wavSourceNode) {
+            try { this.wavSourceNode.stop(); } catch (e) { }
+            this.wavSourceNode.disconnect();
+            this.wavSourceNode = null;
+        }
         if (this.audioCtx) this.audioCtx.close();
+        this.audioCtx = null;
         if (this.mediaStream) this.mediaStream.getTracks().forEach(t => t.stop());
+        this.mediaStream = null;
     }
 
     estimateFreq() {
@@ -458,6 +484,10 @@ class App {
 
         // Model title di topbar (tidak ada badge/dropdown lagi)
         this.btnPower = document.getElementById('btn-power');
+        this.btnLoadWav = document.getElementById('btn-load-wav');
+        this.loadWavStatus = document.getElementById('load-wav-status');
+        this.loadWavList = document.getElementById('load-wav-list');
+        this.sampleTabRow = document.getElementById('sample-tab-row');
 
         // Recommendation areas
         this.recL = document.getElementById('verdict-recomend-l');
@@ -536,6 +566,14 @@ class App {
         this.btnPower.addEventListener('click', () => this.toggleStart());
 
         // Auto-Calibration
+        this.btnLoadWav.addEventListener('click', () => this.openLoadWavModal());
+        document.getElementById('btn-load-wav-close').addEventListener('click', () => this.closeLoadWavModal());
+        this.sampleTabRow.addEventListener('click', (e) => {
+            const btn = e.target.closest('.sample-tab-btn');
+            if (!btn) return;
+            this.loadWavFiles(btn.dataset.folder);
+        });
+
         this.btnACPanel.addEventListener('click', () => this.openAutoCal());
         this.btnACStart1.addEventListener('click', () => this.startACPhase1());
         this.btnACStop1.addEventListener('click', () => this.stopACPhase1());
@@ -575,6 +613,81 @@ class App {
 
     openModal(id) { document.getElementById(id).classList.remove('hidden'); }
     closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+    openLoadWavModal() {
+        this.loadWavFiles('el3');
+        this.openModal('modal-load-wav');
+    }
+
+    closeLoadWavModal() {
+        this.closeModal('modal-load-wav');
+    }
+
+    async loadWavFiles(folder = 'el3') {
+        this.currentWavFolder = folder;
+        this.sampleTabRow.querySelectorAll('.sample-tab-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.folder === folder);
+        });
+
+        this.loadWavStatus.textContent = `Memuat file WAV dari folder ${folder.toUpperCase()}...`;
+        this.loadWavList.innerHTML = '<div class="sample-status">Loading...</div>';
+
+        try {
+            const response = await fetch(`../sample/${folder}/`);
+            const text = await response.text();
+            const doc = new DOMParser().parseFromString(text, 'text/html');
+            const files = Array.from(doc.querySelectorAll('a'))
+                .map(a => decodeURIComponent(a.getAttribute('href')))
+                .filter(href => href.toLowerCase().endsWith('.wav'))
+                .map(href => href.split('/').pop());
+
+            if (!files.length) {
+                this.loadWavList.innerHTML = '<div class="sample-status">Belum ada file WAV di folder ini.</div>';
+                return;
+            }
+
+            this.loadWavList.innerHTML = '';
+            files.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'sample-file-item';
+                item.innerHTML = `<span class="sample-file-name">${file}</span>`;
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-dark';
+                btn.type = 'button';
+                btn.textContent = 'LOAD';
+                btn.addEventListener('click', async () => {
+                    await this.loadWavFile(folder, file);
+                });
+                item.appendChild(btn);
+                this.loadWavList.appendChild(item);
+            });
+        } catch (e) {
+            console.error(e);
+            this.loadWavList.innerHTML = '<div class="sample-status">Gagal memuat daftar WAV.</div>';
+        }
+    }
+
+    async loadWavFile(folder, file) {
+        try {
+            const url = `../sample/${folder}/${encodeURIComponent(file)}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Failed to fetch WAV file');
+
+            const arrayBuffer = await response.arrayBuffer();
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+            await ctx.close();
+
+            this.engine.setWavBuffer(decoded);
+            this.loadWavStatus.textContent = `Loaded WAV: ${folder.toUpperCase()} / ${file}`;
+            this.closeLoadWavModal();
+            this.lblOvr.textContent = 'WAV INPUT READY';
+            this.ovrStatus.className = 'status-box waiting';
+        } catch (e) {
+            console.error(e);
+            alert('Tidak bisa memuat file WAV dari folder sample.');
+        }
+    }
 
     isBlack(note) { return note.includes("#"); }
 

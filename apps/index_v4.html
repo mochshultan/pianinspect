@@ -7,7 +7,7 @@
     <title>Pianika QC Sound Inspector — P32-E</title>
     <meta name="description"
         content="Pianika Sound Quality Control Inspector untuk tipe P32-E dengan deteksi frekuensi real-time.">
-    <link rel="icon" href="assets/yamaha-logo1.png" type="image/png">
+    <link rel="icon" href="../assets/yamaha-logo1.png" type="image/png">
     <link rel="stylesheet" href="style_v5.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
@@ -18,11 +18,13 @@
         <!-- Topbar -->
         <header class="topbar">
             <div class="topbar-left">
-                <img src="assets/yamaha-logo.png" alt="Yamaha Logo" class="topbar-logo">
+                <img src="../assets/yamaha-logo.png" alt="Yamaha Logo" class="topbar-logo">
                 <h1 id="topbar-model-title">P-32E QC</h1>
                 <span class="subtitle">Pianika Sound Inspector</span>
             </div>
             <div class="topbar-right">
+                <button id="btn-load-wav" class="btn btn-dark" type="button" title="Load recorded WAV file"
+                    style="padding: 0 0.9rem; width: auto; min-height: 2.6rem; font-size: 0.72rem; margin-bottom: 0;">LOAD WAV</button>
                 <button id="btn-record-session" class="icon-btn" aria-label="Record Session" title="Record Session"
                     onclick="window.location.href='record.html'">&#x23FA;</button>
 
@@ -83,7 +85,7 @@
                             <div id="verdict-recomend-l" class="verdict-recomend state-idle">
                                 <div class="vc-title">ADJUST</div>
                                 <div class="vc-content">
-                                    <img src="assets/kiri.png" alt="Adjustment Left" class="vc-kiri">
+                                    <img src="../assets/kiri.png" alt="Adjustment Left" class="vc-kiri">
                                     <span class="vc-val">-</span>
                                 </div>
                             </div>
@@ -97,7 +99,7 @@
                             <div id="verdict-recomend-r" class="verdict-recomend state-idle">
                                 <div class="vc-title">ADJUST</div>
                                 <div class="vc-content">
-                                    <img src="assets/kanan.png" alt="Adjustment Right" class="vc-kanan">
+                                    <img src="../assets/kanan.png" alt="Adjustment Right" class="vc-kanan">
                                     <span class="vc-val">-</span>
                                 </div>
                             </div>
@@ -235,10 +237,10 @@
                                 <th>FREQ MAX</th>
                                 <th>STATUS</th>
                                 <th>KETERANGAN</th>
-                                <th><img src="assets/kiri.png" alt="KIRI"
+                                <th><img src="../assets/kiri.png" alt="KIRI"
                                         style="height: 75px; width: auto; object-fit: contain; display: block; margin: 0 auto;">
                                 </th>
-                                <th><img src="assets/kanan.png" alt="KANAN"
+                                <th><img src="../assets/kanan.png" alt="KANAN"
                                         style="height: 75px; width: auto; object-fit: contain; display: block; margin: 0 auto;">
                                 </th>
                             </tr>
@@ -249,6 +251,27 @@
             </div>
             <div class="modal-footer">
                 <button id="btn-log-close" class="btn btn-dark btn-full">TUTUP</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-load-wav" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="load-wav-title">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2 id="load-wav-title">LOAD RECORDED WAV</h2>
+                <span class="sample-note">WAV dari folder sample / recorded</span>
+            </div>
+            <div class="modal-body">
+                <div class="sample-tab-row" id="sample-tab-row">
+                    <button type="button" class="sample-tab-btn active" data-folder="el3">EL 3</button>
+                    <button type="button" class="sample-tab-btn" data-folder="el4">EL 4</button>
+                </div>
+                <div id="load-wav-status" class="sample-status">Pilih file WAV yang sudah pernah direkam dan tersimpan di folder sample.</div>
+                <div id="load-wav-list" class="sample-file-list"></div>
+            </div>
+            <div class="modal-footer">
+                <div class="spacer"></div>
+                <button id="btn-load-wav-close" class="btn btn-dark">TUTUP</button>
             </div>
         </div>
     </div>
