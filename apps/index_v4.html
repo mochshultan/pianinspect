@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pianika QC Sound Inspector — P32-E</title>
+    <meta name="description"
+        content="Pianika Sound Quality Control Inspector untuk tipe P32-E dengan deteksi frekuensi real-time.">
+    <link rel="icon" href="assets/yamaha-logo1.png" type="image/png">
+    <link rel="stylesheet" href="style_v5.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="app">
+        <!-- Topbar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <img src="assets/yamaha-logo.png" alt="Yamaha Logo" class="topbar-logo">
+                <h1 id="topbar-model-title">P-32E QC</h1>
+                <span class="subtitle">Pianika Sound Inspector</span>
+            </div>
+            <div class="topbar-right">
+                <button id="btn-record-session" class="icon-btn" aria-label="Record Session" title="Record Session"
+                    onclick="window.location.href='record.html'">&#x23FA;</button>
+
+                <!-- Model Quick-Select Buttons -->
+                <div class="model-qbtn-group" role="group" aria-label="Pilih Tipe & Lot Pianika">
+                    <button class="model-qbtn active" id="qbtn-p32-el3" data-model="P32-E-EL3" title="P32-E Lot EL3">
+                        <span class="qbtn-type">P32E</span><span class="qbtn-lot el3">EL3</span>
+                    </button>
+                    <button class="model-qbtn" id="qbtn-p32-el4" data-model="P32-E-EL4" title="P32-E Lot EL4">
+                        <span class="qbtn-type">P32E</span><span class="qbtn-lot el4">EL4</span>
+                    </button>
+                </div>
+
+                <button id="btn-power" class="icon-btn" aria-label="Power / Toggle Start Stop"
+                    title="Start / Stop">&#x23FB;</button>
+            </div>
+        </header>
+
+        <!-- Main Content Middle -->
+        <main class="middle-layout">
+            <!-- Left Panel -->
+            <div class="panel-left">
+                <!-- Controls -->
+                <div class="controls-row">
+                    <button id="btn-start" class="btn btn-green">▶ START</button>
+                    <button id="btn-reset" class="btn btn-amber">↺ RESET</button>
+                </div>
+                <button id="btn-cal-main" class="btn btn-dark btn-full">CALIBRATION KEY &amp; RULES</button>
+
+                <!-- Dial Area -->
+                <div class="canvas-box dial-box" aria-label="Pitch Dial Gauge" role="img">
+                    <canvas id="dialCanvas"></canvas>
+                    <div class="dial-overlay">
+                        <div id="dial-note" class="dial-note">—</div>
+                        <div id="dial-hz" class="dial-hz">NO SIGNAL</div>
+                        <div id="dial-badge" class="dial-badge">WAITING</div>
+                    </div>
+                </div>
+
+                <!-- Status Bar -->
+                <div id="ovr-status" class="status-box waiting" aria-live="polite">
+                    <span id="lbl-ovr">WAITING TO START</span>
+                </div>
+            </div>
+
+            <!-- Right Panel -->
+            <div class="panel-right">
+                <button id="btn-open-log" class="btn btn-dark btn-full mb-small">INSPECTION LOG</button>
+
+                <div class="verdict-container">
+                    <div class="verdict-header">
+                        <h3>CURRENT KEY STATUS</h3>
+                    </div>
+
+                    <div class="verdict-body" aria-live="polite">
+                        <div class="verdict-rechero">
+                            <!-- Recomend bagi operator adjust bagian mana 1 -->
+                            <div id="verdict-recomend-l" class="verdict-recomend state-idle">
+                                <div class="vc-title">ADJUST</div>
+                                <div class="vc-content">
+                                    <img src="assets/kiri.png" alt="Adjustment Left" class="vc-kiri">
+                                    <span class="vc-val">-</span>
+                                </div>
+                            </div>
+                            <!-- Upper Banner for Note and Range -->
+                            <div id="verdict-hero" class="verdict-hero state-idle">
+                                <div id="vp-note" class="vp-note">—</div>
+                                <div id="vp-badge" class="vp-badge">—</div>
+                                <div id="vp-hz" class="vp-hz">—</div>
+                            </div>
+                            <!-- Recomend bagi operator adjust bagian mana 2 -->
+                            <div id="verdict-recomend-r" class="verdict-recomend state-idle">
+                                <div class="vc-title">ADJUST</div>
+                                <div class="vc-content">
+                                    <img src="assets/kanan.png" alt="Adjustment Right" class="vc-kanan">
+                                    <span class="vc-val">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Info Grid -->
+                        <div class="verdict-grid">
+                            <div class="vg-col">
+                                <span class="vg-lbl">FREQ MIN</span>
+                                <span id="vp-fmin" class="vg-val text-muted">—</span>
+                            </div>
+                            <div class="vg-col highlight-col">
+                                <span class="vg-lbl">FREQ OK</span>
+                                <span id="vp-fok" class="vg-val text-muted">—</span>
+                            </div>
+                            <div class="vg-col">
+                                <span class="vg-lbl">FREQ MAX</span>
+                                <span id="vp-fmax" class="vg-val text-muted">—</span>
+                            </div>
+                        </div>
+
+                        <!-- RMS & CONF -->
+                        <div class="verdict-stats">
+                            <div class="vs-row">
+                                <span class="vs-lbl">RMS</span>
+                                <span id="vp-rms" class="vs-val text-amber">0.00000</span>
+                            </div>
+                            <div class="vs-row">
+                                <span class="vs-lbl">CONF</span>
+                                <span id="vp-conf" class="vs-val text-green">0.00000</span>
+                            </div>
+                        </div>
+
+                        <!-- Result Banner -->
+                        <div id="vp-result-banner" class="vp-result-banner hidden">
+                            <span id="vp-result-txt">OK</span>
+                        </div>
+                    </div>
+
+                    <div class="verdict-tally">
+                        <div class="tally-item">
+                            <span class="tally-label">OK</span>
+                            <span id="tally-ok" class="tally-val text-muted">0</span>
+                        </div>
+                        <div class="tally-item">
+                            <span class="tally-label">NG</span>
+                            <span id="tally-ng" class="tally-val text-muted">0</span>
+                        </div>
+                        <div class="tally-item">
+                            <span class="tally-label">REM</span>
+                            <span id="tally-rem" class="tally-val text-amber">32</span>
+                        </div>
+                        <div class="tally-item">
+                            <span class="tally-label">TOTAL</span>
+                            <span id="tally-ovr" class="tally-val text-muted">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Piano Layout -->
+        <footer class="piano-layout" aria-label="Piano Keys Visualizer">
+            <canvas id="pianoCanvas"></canvas>
+        </footer>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-cal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cal-title">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2 id="cal-title">CALIBRATION KEY / INSPECTION RULES</h2>
+                <div class="cal-json-label" id="cal-json-label">
+                    <span class="cal-json-icon">📄</span>
+                    <span id="cal-json-filename">P32E_EL3.json</span>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="cal-config-banner">
+                    <div class="config-field">
+                        <label for="cal-inp-rms">MINIMUM RMS</label>
+                        <input type="number" step="0.001" id="cal-inp-rms" class="tbl-input">
+                    </div>
+                    <div class="config-field">
+                        <label for="cal-inp-conf">MINIMUM CONFIDENT</label>
+                        <input type="number" step="0.001" id="cal-inp-conf" class="tbl-input">
+                    </div>
+                    <button id="btn-autocal-open" class="btn-autocal-trigger" aria-label="Auto Calibration"
+                        title="System Noise & Sensitivity Calibration">
+                        <span>Auto Calibration</span>
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table id="cal-table">
+                        <thead>
+                            <tr>
+                                <th>NO</th>
+                                <th>NOTE</th>
+                                <th>FREQ_OK</th>
+                                <th>FREQ_MIN</th>
+                                <th>FREQ_MAX</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cal-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-cal-reset" class="btn btn-dark">RESET</button>
+                <input type="file" id="inp-cal-file" accept=".json" style="display:none;">
+                <button id="btn-cal-import" class="btn btn-dark">IMPORT JSON</button>
+                <button id="btn-cal-export" class="btn btn-dark">EXPORT JSON</button>
+                <div class="spacer"></div>
+                <button id="btn-cal-cancel" class="btn btn-dark">BATAL</button>
+                <button id="btn-cal-save" class="btn btn-green">SIMPAN</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-log" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="log-title">
+        <div class="modal-content modal-xl">
+            <div class="modal-header">
+                <h2 id="log-title">INSPECTION LOG / P-32E</h2>
+            </div>
+            <div class="modal-body">
+                <div class="table-container">
+                    <table id="log-table">
+                        <thead>
+                            <tr>
+                                <th>TUTS</th>
+                                <th>NADA</th>
+                                <th>FREQ DET</th>
+                                <th>FREQ OK</th>
+                                <th>FREQ MIN</th>
+                                <th>FREQ MAX</th>
+                                <th>STATUS</th>
+                                <th>KETERANGAN</th>
+                                <th><img src="assets/kiri.png" alt="KIRI"
+                                        style="height: 75px; width: auto; object-fit: contain; display: block; margin: 0 auto;">
+                                </th>
+                                <th><img src="assets/kanan.png" alt="KANAN"
+                                        style="height: 75px; width: auto; object-fit: contain; display: block; margin: 0 auto;">
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="log-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-log-close" class="btn btn-dark btn-full">TUTUP</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-autocal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="autocal-title">
+        <div class="modal-content modal-autocal-wrap">
+            <div class="modal-header">
+                <h2 id="autocal-title">ROBUST CALIBRATION SYSTEM</h2>
+                <div class="cal-status-badge" id="autocal-status">STANDBY</div>
+            </div>
+            <div class="modal-body autocal-body">
+
+                <!-- ROW 1: Live Metrics -->
+                <div class="ac-live-row">
+                    <div class="ac-metric-card ac-metric-rms">
+                        <div class="ac-metric-label">LIVE RMS</div>
+                        <div id="ac-rms-val" class="ac-metric-value">0.00000</div>
+                        <div class="ac-metric-sub">
+                            <span class="ac-sub-label">FLOOR PEAK</span>
+                            <span id="ac-rms-peak" class="ac-sub-val">—</span>
+                        </div>
+                        <div class="ac-metric-sub">
+                            <span class="ac-sub-label">SIGNAL PEAK</span>
+                            <span id="ac-rms-sig" class="ac-sub-val">—</span>
+                        </div>
+                    </div>
+
+                    <div class="ac-command-center">
+                        <div id="ac-phase-label" class="ac-phase-label">PHASE —</div>
+                        <div id="ac-command" class="autocal-command">Siap untuk kalibrasi? Pastikan ruangan tenang.
+                        </div>
+                        <div id="ac-timer" class="autocal-timer hidden">3</div>
+                        <div class="autocal-progress-wrap">
+                            <div id="ac-progress" class="autocal-progress"></div>
+                        </div>
+                    </div>
+
+                    <div class="ac-metric-card ac-metric-conf">
+                        <div class="ac-metric-label">LIVE CONF</div>
+                        <div id="ac-conf-val" class="ac-metric-value">0.00000</div>
+                        <div class="ac-metric-sub">
+                            <span class="ac-sub-label">SIGNAL MIN</span>
+                            <span id="ac-conf-min" class="ac-sub-val">—</span>
+                        </div>
+                        <div class="ac-metric-sub">
+                            <span class="ac-sub-label">SIGNAL AVG</span>
+                            <span id="ac-conf-avg" class="ac-sub-val">—</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ROW 2: Calibration Result -->
+                <div class="ac-result-row" id="ac-result-row">
+                    <div class="ac-result-title">HASIL KALIBRASI</div>
+                    <div class="ac-result-grid">
+                        <div class="ac-result-item">
+                            <span class="ac-result-label">FLOOR NOISE</span>
+                            <span id="ac-res-floor" class="ac-result-val">—</span>
+                        </div>
+                        <div class="ac-result-item">
+                            <span class="ac-result-label">SIGNAL RMS</span>
+                            <span id="ac-res-signal" class="ac-result-val">—</span>
+                        </div>
+                        <div class="ac-result-item ac-result-sep">
+                            <span class="ac-result-label">SNR RATIO</span>
+                            <span id="ac-res-snr" class="ac-result-val">—</span>
+                        </div>
+                        <div class="ac-result-item ac-result-highlight">
+                            <span class="ac-result-label">MIN RMS</span>
+                            <span id="ac-res-rms" class="ac-result-val ac-result-suggest">—</span>
+                        </div>
+                        <div class="ac-result-item ac-result-highlight">
+                            <span class="ac-result-label">MIN CONF</span>
+                            <span id="ac-res-conf" class="ac-result-val ac-result-suggest">—</span>
+                        </div>
+                        <div class="ac-result-item">
+                            <span class="ac-result-label">STATUS</span>
+                            <span id="ac-res-status" class="ac-result-val">—</span>
+                        </div>
+                    </div>
+                    <div id="ac-warn-msg" class="ac-warn-msg hidden"></div>
+                </div>
+
+            </div>
+            <div class="modal-footer ac-footer">
+                <div class="ac-action-group">
+                    <button id="btn-ac-start-phase1" class="btn btn-dark">PHASE 1</button>
+                    <button id="btn-ac-stop-phase1" class="btn btn-red hidden">STOP</button>
+                </div>
+                <div class="ac-action-group">
+                    <button id="btn-ac-start-phase2" class="btn btn-dark" disabled>PHASE 2</button>
+                </div>
+                <div class="spacer"></div>
+                <button id="btn-ac-close" class="btn btn-dark">TUTUP</button>
+                <button id="btn-ac-save" class="btn btn-green hidden">TERAPKAN HASIL</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="main_v4.js"></script>
+
+</body>
+
+</html>
