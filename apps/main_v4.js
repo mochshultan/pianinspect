@@ -152,12 +152,12 @@ const COLORS = {
 // ──────────────────────────────────────────────────────────
 // MATCH_CENTS: radius identifikasi nada (bukan batas NG/OK — itu dari fmin/fmax JSON)
 // Nada NG (freq di luar fmin/fmax) pun masih ter-match, verdict tetap dari toleransi JSON
-const MATCH_CENTS = 20;  // ±20 ¢ = seperdelapan semitone
-const HOLD_F = 5;      // frame hold setelah unmatched sebelum reset (~0.08s)
-const WARMUP_F = 90;     // frame stabilisasi setelah terdeteksi (1 detik)
-const INSP_F = 5;
-const OK_TIGHT = 0.5   // frame inspection window setelah warmup (0.08 detik)
-// TOTAL waktu hingga verdict = WARMUP_F + INSP_F = 65 frame ≈ 1.08 detik
+const MATCH_CENTS = 40;  // Toleransi awal ±40 ¢ untuk kuncian super kuat di awal tiupan
+const HOLD_F = 30;       // Tahan kuncian hingga 0.5 detik meski suara tiba-tiba hilang/pecah
+const WARMUP_F = 90;     // Stabilisasi 1.5 detik
+const INSP_F = 30;       // Evaluasi akhir memakai 30 frame (0.5 detik penuh) untuk verdict
+const OK_TIGHT = 0.5;  
+// TOTAL waktu hingga verdict = WARMUP_F + INSP_F
 
 // ──────────────────────────────────────────────────────────
 // Komunikasi Perangkat Luar (I/O Register Robot FANUC CRX-10)
@@ -219,9 +219,9 @@ class AudioEngine {
             lpFilter.frequency.value = 1200;
 
             this.analyser = this.audioCtx.createAnalyser();
-            // Use 2048 samples (~42ms) for time-domain YIN autocorrelation pitch detection.
-            this.analyser.fftSize = 2048;
-            this.analyser.smoothingTimeConstant = 0.75;
+            // Buffer 8192 (~170ms). Resolusi waktu maksimum yang sangat aman dan stabil untuk YIN.
+            this.analyser.fftSize = 8192;
+            this.analyser.smoothingTimeConstant = 0.85; // Sedikit lebih halus
 
             let source;
             if (this.inputMode === 'wav') {
@@ -358,7 +358,22 @@ class AudioEngine {
     loop() {
         if (!this.run) return;
 
-        let { freq, conf, rms } = this.estimateFreq();
+        let { freq: rawFreq, conf, rms } = this.estimateFreq();
+
+        // --- SLIDING MEDIAN FILTER UNTUK STABILITAS YIN ---
+        let freq = rawFreq;
+        if (rawFreq > 0) {
+            if (!this.rawFreqHist) this.rawFreqHist = [];
+            this.rawFreqHist.push(rawFreq);
+            // Simpan 21 frame terakhir (~350ms) untuk menyapu bersih noise panjang
+            if (this.rawFreqHist.length > 21) this.rawFreqHist.shift(); 
+            
+            let slice = [...this.rawFreqHist].sort((a,b) => a - b);
+            freq = slice[Math.floor(slice.length / 2)]; // Ambil nilai tengah (Median)
+        } else {
+            this.rawFreqHist = [];
+        }
+        // ----------------------------------------------------
 
         // Nearest-neighbor matching dalam ±MATCH_CENTS
         // → nada NG (freq di luar fmin/fmax) tetap ter-match; verdict ditentukan oleh fmin/fmax

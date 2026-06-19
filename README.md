@@ -2,6 +2,19 @@
 
 Sebuah dasbor inspeksi profesional untuk pengendalian kualitas suara secara *real-time* pada instrumen P-32E. Dirancang untuk evaluasi cepat, umpan balik visual, dan alur kerja perekaman audio.
 
+## 📋 Daftar Isi
+- [🔎 Pratinjau](#-pratinjau)
+- [✨ Gambaran Umum](#-gambaran-umum)
+- [🎯 Fitur Unggulan](#-fitur-unggulan)
+- [🧩 Struktur Utama](#-struktur-utama)
+- [🚀 Cara Menjalankan](#-cara-menjalankan)
+- [⚙️ Detail Teknis: Deteksi Nada Akurat (Algoritma YIN)](#️-detail-teknis-deteksi-nada-akurat-algoritma-yin)
+- [👶 Penjelasan Sederhana (Bahasa Bayi)](#-penjelasan-sederhana-bahasa-bayi-kenapa-yin-sangat-cerdas)
+- [🎛️ Parameter Tuning Stabilitas](#️-parameter-tuning-stabilitas-yin-tunable-parameters)
+- [🤖 Integrasi Robot / Perangkat Luar](#-integrasi-robot--perangkat-luar-contoh-fanuc-crx-10)
+
+---
+
 ## 🔎 Pratinjau
 
 ### Halaman Inspeksi
@@ -137,6 +150,35 @@ Jika pakai cara lama, komputer akan melihat suara melengking (yang kebetulan pal
 Tapi YIN mengambil *seluruh* pola suara amburadul itu, memfotokopinya, dan menggesernya. YIN lalu menyadari: *"Tunggu dulu, walaupun polanya sangat berantakan, tapi seluruh gambar berantakan ini SELALU berulang atau menumpuk pas setiap digeser sejauh jarak tertentu!"* 
 
 Setelah dihitung, ternyata pola amburadul itu mengulang dirinya sendiri sebanyak persis **176 kali dalam satu detik**. Dari situlah YIN dengan sangat yakin dan cerdas berkata: *"Ah! Pola berantakan ini berulangnya 176 kali sedetik. Apapun suara bising di dalamnya, ini pasti nada F!"*
+
+---
+
+## 🎛️ Parameter Tuning Stabilitas (YIN Tunable Parameters)
+
+Aplikasi ini dilengkapi dengan beberapa parameter bawaan di `apps/main_v4.js` yang telah dikalibrasi ke batas maksimal untuk menangkal *noise* dan osilasi frekuensi, namun tetap dapat disesuaikan (di-*tune*) oleh *Developer* jika lingkungan produksi berubah:
+
+1. **`fftSize` (Buffer Resolusi YIN)**
+   - **Lokasi:** Baris `this.analyser.fftSize = 8192;`
+   - **Fungsi:** Menentukan seberapa panjang blok data audio yang diambil untuk satu kali hitungan YIN.
+   - **Tuning:** Angka `8192` memberikan jendela waktu yang sangat panjang (~170 milidetik), sehingga deteksi nada (terutama nada rendah) sangat tangguh. Turunkan ke `4096` atau `2048` hanya jika terjadi *lag* parah pada PC industri yang sudah usang.
+
+2. **`Sliding Median Filter` (Penyaring Noise Mentah)**
+   - **Lokasi:** Di dalam metode `loop()`, array `this.rawFreqHist`
+   - **Fungsi:** Menyimpan memori frekuensi mentah yang terdeteksi secara beruntun dan selalu memilih *nilai tengahnya* (Median).
+   - **Tuning:** Di-set menahan riwayat **21 frame** (~350ms). Jika ada *noise* hembusan napas keras mendadak selama < 150ms, filter ini otomatis mengabaikannya (*outlier rejection*). Perbesar ukuran antrean (misal 31) jika lingkungan sangat berisik.
+
+3. **`MATCH_CENTS` (Radius Kuncian Awal Nada)**
+   - **Lokasi:** `const MATCH_CENTS = 40;`
+   - **Fungsi:** Toleransi tangkapan awal. Walaupun tiupan awal sekotor/seberantakan ±40 cents, sistem akan langsung "mengunci" tuts/nada target tersebut dan tidak membiarkannya melompat liar ke tebakan nada lain.
+
+4. **`HOLD_F` (Sistem Pemaaf Jeda)**
+   - **Lokasi:** `const HOLD_F = 30;`
+   - **Fungsi:** Berapa banyak frame berturut-turut sistem bersedia menunggu sebelum membatalkan inspeksi (misalnya saat tiupan operator tiba-tiba terputus sedikit).
+   - **Tuning:** Angka `30` berarti aplikasi memaafkan tiupan yang putus-putus hingga batas **0.5 detik penuh** tanpa me-reset progres pengujian.
+
+5. **`WARMUP_F` & `INSP_F` (Masa Tunggu & Evaluasi Akhir)**
+   - **Lokasi:** `const WARMUP_F = 90;` dan `const INSP_F = 30;`
+   - **Fungsi:** Saat nada mulai dikunci, sistem akan sengaja **membuang data selama 1.5 detik pertama** (`WARMUP_F`) karena secara alamiah tiupan harmonik belum stabil/rata. Setelah lewat masa *warmup* ini, sistem mengambil median akhir dari sisa tiupan selama **0.5 detik penuh** (`INSP_F`) untuk secara mutlak memvonis **OK** atau **NG**.
 
 ---
 
