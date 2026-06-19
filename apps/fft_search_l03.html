@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FFT Config Search — sample/el3 (L03)</title>
+  <style>
+    :root { color-scheme: dark; --bg:#111827; --panel:#172033; --line:#243046; --text:#eff6ff; --muted:#cbd5e1; --ok:#22c55e; --warn:#f59e0b; --bad:#fb7185; }
+    * { box-sizing: border-box; font-family: Segoe UI, Arial, sans-serif; }
+    body { margin: 0; background: linear-gradient(145deg,#0f172a,#111827 55%,#111827); color: var(--text); min-height:100vh; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    .panel { background: rgba(15,23,42,0.92); border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:0 12px 30px rgba(0,0,0,.35); }
+    h1 { margin: 0 0 8px; font-size: 1.35rem; }
+    p { color: var(--muted); line-height: 1.45; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:14px; }
+    button { border:1px solid #334155; background:#1f2937; color:white; border-radius:10px; padding:10px 14px; cursor:pointer; font-weight:600; }
+    button:hover { background:#243244; }
+    button:disabled { opacity: .55; cursor: wait; }
+    code { background:#0b1220; padding:2px 6px; border-radius:6px; color:#bfdbfe; }
+    .small { font-size:.92rem; color:var(--muted); }
+    #log { white-space: pre-wrap; background:#0b1220; border:1px solid var(--line); border-radius:12px; padding:12px; color:#dbeafe; min-height: 140px; max-height: 260px; overflow:auto; }
+    table { width:100%; border-collapse: collapse; margin-top:14px; font-size:.95rem; }
+    th, td { border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align: top; }
+    th { background:#172033; color:#e5eefb; }
+    tr:hover td { background:#111827; }
+    .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.06); font-size:.85rem; }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .warn { color: var(--warn); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>Search konfigurasi FFT terbaik untuk sample/el3 (suffix <code>_L03.wav</code>)</h1>
+      <p>File ground truth dipilih dari nama berisi kunci di dalam kurung, mis. <code>el3_keyA(17)_L03.wav</code>. Skrip ini menguji beberapa kombinasi FFT size dan smoothing lalu menampilkan konfigurasi yang paling akurat terhadap label kunci pada file L03.</p>
+      <div class="row">
+        <button id="btnRun" type="button">Mulai cari konfigurasi terbaik</button>
+        <span class="small">Target: semua file <code>sample/el3/*_L03.wav</code></span>
+      </div>
+      <div id="status" class="small" style="margin-top:10px;">Siap.</div>
+      <div id="log" style="margin-top:12px;"></div>
+      <table id="resultsTable" aria-label="Hasil pencarian konfigurasi FFT">
+        <thead>
+          <tr>
+            <th>FFT</th>
+            <th>Smoothing</th>
+            <th>MinConf</th>
+            <th>MinRms</th>
+            <th>Accuracy</th>
+            <th>Mean cents err</th>
+            <th>OK / total</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const RULES = [
+      [1, 'F', 176.3, 176, 176.6], [2, 'F#', 186.25, 186.2, 186.3], [3, 'G', 197.2, 197.1, 197.3], [4, 'G#', 208.95, 208.7, 209.2], [5, 'A', 221.45, 221.4, 221.5],
+      [6, 'A#', 234.5, 234.4, 234.6], [7, 'B', 248.5, 248.4, 248.6], [8, 'C\'', 263.25, 263.1, 263.4], [9, 'C#\'', 279.7, 279.2, 280.2], [10, 'D\'', 296.05, 295.5, 296.6],
+      [11, 'D#\'', 313.65, 313.1, 314.2], [12, 'E\'', 332.4, 331.9, 332.9], [13, 'F\'', 351.6, 351.1, 352.1], [14, 'F#\'', 372.2, 372.1, 372.3], [15, 'G\'', 394.4, 394.3, 394.5],
+      [16, 'G#\'', 417.85, 417.7, 418], [17, 'A\'', 442.7, 442.5, 442.9], [18, 'A#\'', 468.7, 468.6, 468.8], [19, 'B\'', 497, 496.7, 497.3], [20, 'C\'\'', 526.5, 526.1, 526.9],
+      [21, 'C#\'\'', 557.65, 557.5, 557.8], [22, 'D\'\'', 590.7, 590.5, 590.9], [23, 'D#\'\'', 624.4, 623.3, 625.5], [24, 'E\'\'', 662.65, 662.5, 662.8], [25, 'F\'\'', 701.6, 701.1, 702.1],
+      [26, 'F#\'\'', 743.95, 743.4, 744.5], [27, 'G\'\'', 788.15, 787.9, 788.4], [28, 'G#\'\'', 835.1, 835, 835.2], [29, 'A\'\'', 884.8, 884.1, 885.5], [30, 'A#\'\'', 937.65, 937.15, 938.15],
+      [31, 'B\'\'', 993.25, 993, 993.5], [32, 'C\'\'\'', 1051.95, 1051.45, 1052.45]
+    ];
+
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+    const tbody = document.querySelector('#resultsTable tbody');
+    const btnRun = document.getElementById('btnRun');
+    const BASE_URL = (location.protocol === 'file:') ? 'http://localhost/INSPECTION' : location.origin + '/INSPECTION';
+
+    function log(msg) {
+      const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logEl.textContent += line + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function cents(f1, f2) { return (f1 > 0 && f2 > 0) ? 1200 * Math.log2(f1 / f2) : 9999; }
+
+    function bestRuleForFreq(freq) {
+      let best = null;
+      let bestC = 9999;
+      for (const r of RULES) {
+        const c = Math.abs(cents(freq, r[2]));
+        if (c < bestC) { bestC = c; best = r; }
+      }
+      return { rule: best, cents: bestC };
+    }
+
+    function estimateFreqFromAnalyser(analyser, ctx, minRms = 0.009, minConf = 0.06) {
+      const timeData = new Float32Array(analyser.fftSize);
+      analyser.getFloatTimeDomainData(timeData);
+      let sumSquares = 0;
+      for (let i = 0; i < timeData.length; i++) sumSquares += timeData[i] * timeData[i];
+      const rms = Math.sqrt(sumSquares / timeData.length);
+      if (rms < minRms) return { freq: -1, conf: 0, rms, matched: null };
+
+      const freqData = new Float32Array(analyser.frequencyBinCount);
+      analyser.getFloatFrequencyData(freqData);
+      const hzPerBin = ctx.sampleRate / analyser.fftSize;
+      const linearMag = freqData.map(v => Math.pow(10, v / 20));
+      let total = 0;
+      for (let i = 0; i < linearMag.length; i++) total += linearMag[i] * linearMag[i];
+
+      let bestBand = null;
+      for (const rule of RULES) {
+        const [, , , fmin, fmax] = rule;
+        const startBin = Math.max(0, Math.floor(fmin / hzPerBin));
+        const endBin = Math.min(linearMag.length - 1, Math.ceil(fmax / hzPerBin));
+        if (startBin >= endBin) continue;
+        let bandEnergy = 0;
+        let bandPeak = 0;
+        let bandPeakBin = startBin;
+        for (let i = startBin; i <= endBin; i++) {
+          const amp = linearMag[i];
+          bandEnergy += amp * amp;
+          if (amp > bandPeak) { bandPeak = amp; bandPeakBin = i; }
+        }
+        const score = bandEnergy + bandPeak * 30;
+        if (!bestBand || score > bestBand.score) bestBand = { bandPeakBin, bandPeak, score };
+      }
+      if (!bestBand || bestBand.bandPeak <= 0) return { freq: -1, conf: 0, rms, matched: null };
+
+      let pi = bestBand.bandPeakBin;
+      let fd = pi * hzPerBin;
+      if (pi > 0 && pi < linearMag.length - 1) {
+        const a = freqData[pi - 1];
+        const b = freqData[pi];
+        const c = freqData[pi + 1];
+        const d = a - 2 * b + c;
+        const p = d !== 0 ? 0.5 * (a - c) / d : 0;
+        fd = (pi + p) * hzPerBin;
+      }
+
+      const conf = total > 0 ? (bestBand.bandPeak * bestBand.bandPeak) / total : 0;
+      const matched = bestRuleForFreq(fd);
+      return { freq: fd, conf, rms, matched };
+    }
+
+    function parseGroundTruth(fileName) {
+      const m = fileName.match(/el3_key[A-G]\((\d+)\)_L03\.wav$/i);
+      return m ? Number(m[1]) : null;
+    }
+
+    async function fetchFileList() {
+      const dirUrl = `${BASE_URL}/sample/el3/`;
+      const res = await fetch(dirUrl);
+      const html = await res.text();
+      const hrefs = [...html.matchAll(/href="([^"]+\.wav)"/gi)].map(m => m[1]);
+      return hrefs.filter(h => /_L03\.wav$/i.test(h)).map(h => h.replace(/^\.\//, ''));
+    }
+
+    function makeMiddleSlice(audioBuffer, windowMs = 500) {
+      const sr = audioBuffer.sampleRate;
+      const totalMs = audioBuffer.duration * 1000;
+      const safeWindowMs = Math.min(700, Math.max(250, windowMs));
+      const startMs = Math.max(0, (totalMs - safeWindowMs) / 2);
+      const startSample = Math.floor((startMs / 1000) * sr);
+      const endSample = Math.min(audioBuffer.length, startSample + Math.floor((safeWindowMs / 1000) * sr));
+      const sliceLen = Math.max(1, endSample - startSample);
+
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const sliceBuffer = ctx.createBuffer(1, sliceLen, sr);
+      sliceBuffer.getChannelData(0).set(audioBuffer.getChannelData(0).subarray(startSample, endSample));
+      return { sliceBuffer, ctx };
+    }
+
+    async function analyzeSingleFile(fileName, cfg) {
+      const url = `${BASE_URL}/sample/el3/${fileName}`;
+      const arrayBuffer = await fetch(url).then(r => r.arrayBuffer());
+      const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await decodeCtx.decodeAudioData(arrayBuffer.slice(0));
+      const { sliceBuffer, ctx } = makeMiddleSlice(audioBuffer, 500);
+      await decodeCtx.close();
+
+      const source = ctx.createBufferSource();
+      source.buffer = sliceBuffer;
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = cfg.fftSize;
+      analyser.smoothingTimeConstant = cfg.smoothing;
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+
+      const frames = [];
+      const targetMs = Math.min(900, Math.max(350, sliceBuffer.duration * 1000));
+      const start = performance.now();
+      const stopAt = start + targetMs;
+
+      const step = () => {
+        const now = performance.now();
+        if (now >= stopAt) {
+          try { source.stop(); } catch (e) {}
+          return;
+        }
+        const est = estimateFreqFromAnalyser(analyser, ctx, cfg.minRms, cfg.minConf);
+        if (est.freq > 0) frames.push(est);
+        requestAnimationFrame(step);
+      };
+
+      source.start(0);
+      setTimeout(() => { try { source.stop(); } catch (e) {} }, targetMs);
+      step();
+      await new Promise((resolve) => { source.onended = resolve; });
+      await ctx.close();
+
+      if (!frames.length) return { fileName, expected: parseGroundTruth(fileName), ok: false, freq: null, conf: 0, cents: 9999, note: null };
+
+      const med = frames.slice().sort((a, b) => a.freq - b.freq)[Math.floor(frames.length / 2)];
+      const best = bestRuleForFreq(med.freq);
+      const expected = parseGroundTruth(fileName);
+      const predicted = best.rule ? best.rule[0] : null;
+      const ok = predicted === expected && med.conf >= cfg.minConf;
+      return { fileName, expected, predicted, ok, freq: med.freq, conf: med.conf, cents: best.cents, note: best.rule ? best.rule[1] : null };
+    }
+
+    function rankResult(results) {
+      const correct = results.filter(r => r.ok).length;
+      const accuracy = results.length ? correct / results.length : 0;
+      const meanCents = results.length ? results.reduce((s, r) => s + (r.cents || 0), 0) / results.length : 0;
+      return { correct, accuracy, meanCents };
+    }
+
+    async function runSearch() {
+      btnRun.disabled = true;
+      statusEl.textContent = 'Memuat daftar file L03…';
+      logEl.textContent = '';
+      tbody.innerHTML = '';
+
+      try {
+        const files = await fetchFileList();
+        if (!files.length) throw new Error('Tidak ada file _L03.wav yang ditemukan di sample/el3/.');
+        log(`Ditemukan ${files.length} file ground truth L03.`);
+
+        const candidates = [
+          { fftSize: 4096, smoothing: 0.0, minConf: 0.02, minRms: 0.006 },
+          { fftSize: 8192, smoothing: 0.0, minConf: 0.03, minRms: 0.006 },
+          { fftSize: 16384, smoothing: 0.8, minConf: 0.04, minRms: 0.006 },
+          { fftSize: 32768, smoothing: 0.8, minConf: 0.05, minRms: 0.006 }
+        ];
+
+        const results = [];
+        for (const cfg of candidates) {
+          log(`Menguji FFT=${cfg.fftSize}, smoothing=${cfg.smoothing}, minConf=${cfg.minConf}, minRms=${cfg.minRms}…`);
+          const perFile = [];
+          for (const file of files) {
+            try {
+              const r = await analyzeSingleFile(file, cfg);
+              perFile.push(r);
+            } catch (e) {
+              log(`  × ${file}: ${e.message}`);
+            }
+          }
+          const summary = rankResult(perFile);
+          results.push({ cfg, summary, perFile });
+          log(`  -> accuracy ${summary.accuracy.toFixed(3)} | meanCents ${summary.meanCents.toFixed(1)} | correct ${summary.correct}/${perFile.length}`);
+        }
+
+        results.sort((a, b) => b.summary.accuracy - a.summary.accuracy || a.summary.meanCents - b.summary.meanCents);
+        const best = results[0];
+
+        for (const row of results) {
+          const tr = document.createElement('tr');
+          const acc = (row.summary.accuracy * 100).toFixed(1) + '%';
+          const cls = row === best ? 'ok' : '';
+          tr.innerHTML = `
+            <td class="${cls}">${row.cfg.fftSize}</td>
+            <td class="${cls}">${row.cfg.smoothing.toFixed(1)}</td>
+            <td class="${cls}">${row.cfg.minConf.toFixed(2)}</td>
+            <td class="${cls}">${row.cfg.minRms.toFixed(3)}</td>
+            <td class="${cls}">${acc}</td>
+            <td class="${cls}">${row.summary.meanCents.toFixed(1)}</td>
+            <td class="${cls}">${row.summary.correct}/${row.perFile.length}</td>`;
+          tbody.appendChild(tr);
+        }
+
+        statusEl.innerHTML = `Terbaik saat ini: <span class="ok">FFT=${best.cfg.fftSize}, smoothing=${best.cfg.smoothing.toFixed(1)}, minConf=${best.cfg.minConf.toFixed(2)}, minRms=${best.cfg.minRms.toFixed(3)}</span> dengan accuracy ${(best.summary.accuracy * 100).toFixed(1)}%.`;
+        log(`SELESAI. Kandidat terbaik: FFT=${best.cfg.fftSize}, smoothing=${best.cfg.smoothing.toFixed(1)}, minConf=${best.cfg.minConf.toFixed(2)}, minRms=${best.cfg.minRms.toFixed(3)}.`);
+      } catch (e) {
+        statusEl.textContent = 'Gagal menjalankan pencarian.';
+        log('ERROR: ' + e.message);
+        console.error(e);
+      } finally {
+        btnRun.disabled = false;
+      }
+    }
+
+    btnRun.addEventListener('click', runSearch);
+  </script>
+</body>
+</html>

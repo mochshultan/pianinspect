@@ -25,6 +25,7 @@
             <div class="topbar-right">
                 <button id="btn-load-wav" class="btn btn-dark" type="button" title="Load recorded WAV file"
                     style="padding: 0 0.9rem; width: auto; min-height: 2.6rem; font-size: 0.72rem; margin-bottom: 0;">LOAD WAV</button>
+                <div id="wav-current-status" class="wav-current-status" title="Nama file WAV yang sedang aktif">INPUT: MIC (live)</div>
                 <button id="btn-record-session" class="icon-btn" aria-label="Record Session" title="Record Session"
                     onclick="window.location.href='record.html'">&#x23FA;</button>
 
@@ -270,6 +271,7 @@
                 <div id="load-wav-list" class="sample-file-list"></div>
             </div>
             <div class="modal-footer">
+                <button id="btn-load-wav-mic" class="btn btn-amber">USE MIC</button>
                 <div class="spacer"></div>
                 <button id="btn-load-wav-close" class="btn btn-dark">TUTUP</button>
             </div>

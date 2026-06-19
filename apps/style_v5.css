@@ -156,6 +156,25 @@ body::after {
   min-height: 2.6rem;
 }
 
+.wav-current-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 1.7rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  line-height: 1.1;
+  text-align: right;
+  max-width: 15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .topbar-right .icon-btn,
 .topbar-right .model-switcher-wrap,
 .topbar-right .model-type-btn {

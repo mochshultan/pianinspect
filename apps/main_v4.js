@@ -159,6 +159,13 @@ const INSP_F = 5;
 const OK_TIGHT = 0.5   // frame inspection window setelah warmup (0.08 detik)
 // TOTAL waktu hingga verdict = WARMUP_F + INSP_F = 65 frame ≈ 1.08 detik
 
+// ──────────────────────────────────────────────────────────
+// Komunikasi Perangkat Luar (I/O Register Robot FANUC CRX-10)
+// 1/High = OK (Aman)
+// 0/Low  = NG (Robot melakukan tuning reed)
+// ──────────────────────────────────────────────────────────
+window.ROBOT_TUNING_IO = 1;
+
 function cents(f1, f2) {
     return (f1 > 0 && f2 > 0) ? 1200 * Math.log2(f1 / f2) : 9999.0;
 }
@@ -178,6 +185,7 @@ class AudioEngine {
         this.inputMode = 'mic';
         this.wavBuffer = null;
         this.wavSourceNode = null;
+        this.wavOutputGain = null;
 
         this.hold = {};
         this.accum = {};
@@ -199,7 +207,8 @@ class AudioEngine {
 
     async start() {
         try {
-            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+            // Target the same 48 kHz path used by the recorder hardware setup.
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
 
             const hpFilter = this.audioCtx.createBiquadFilter();
             hpFilter.type = 'highpass';
@@ -210,8 +219,9 @@ class AudioEngine {
             lpFilter.frequency.value = 1200;
 
             this.analyser = this.audioCtx.createAnalyser();
-            this.analyser.fftSize = 32768;
-            this.analyser.smoothingTimeConstant = 0.0;
+            // Use 2048 samples (~42ms) for time-domain YIN autocorrelation pitch detection.
+            this.analyser.fftSize = 2048;
+            this.analyser.smoothingTimeConstant = 0.75;
 
             let source;
             if (this.inputMode === 'wav') {
@@ -222,6 +232,13 @@ class AudioEngine {
                 source.buffer = this.wavBuffer;
                 source.loop = true;
                 this.wavSourceNode = source;
+
+                const playbackGain = this.audioCtx.createGain();
+                playbackGain.gain.value = 1.0;
+                this.wavOutputGain = playbackGain;
+
+                source.connect(playbackGain);
+                playbackGain.connect(this.audioCtx.destination);
                 source.start(0);
             } else {
                 this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -255,6 +272,10 @@ class AudioEngine {
             this.wavSourceNode.disconnect();
             this.wavSourceNode = null;
         }
+        if (this.wavOutputGain) {
+            this.wavOutputGain.disconnect();
+            this.wavOutputGain = null;
+        }
         if (this.audioCtx) this.audioCtx.close();
         this.audioCtx = null;
         if (this.mediaStream) this.mediaStream.getTracks().forEach(t => t.stop());
@@ -271,51 +292,67 @@ class AudioEngine {
         let rms = Math.sqrt(sumSquares / tLen);
         if (rms < this.settings.minRms) return { freq: -1, conf: 0, rms };
 
-        this.analyser.getFloatFrequencyData(this.freqData);
-
-        let flo = this.rules[0][3];
-        let fhi = this.rules[this.rules.length - 1][4];
-        let m = 0.78;
-        let hzPerBin = this.audioCtx.sampleRate / this.analyser.fftSize;
-
-        let minBin = Math.max(0, Math.floor((flo * m) / hzPerBin));
-        let maxBin = Math.min(this.freqData.length - 1, Math.ceil((fhi / m) / hzPerBin));
-
-        let tot = 0;
-        let pi = -1;
-        let maxVal = -1;
-
-        let fLen = this.freqData.length;
-
-        for (let i = 0; i < fLen; i++) {
-            let linear = Math.pow(10, this.freqData[i] / 20);
-            tot += linear * linear;
-
-            if (i >= minBin && i <= maxBin) {
-                if (linear > maxVal) {
-                    maxVal = linear;
-                    pi = i;
+        // YIN Autocorrelation Algorithm
+        const sampleRate = this.audioCtx.sampleRate;
+        const threshold = 0.1;
+        const bufferSize = this.timeData.length;
+        const wLen = Math.floor(bufferSize / 2);
+        const tMax = Math.min(wLen, Math.floor(sampleRate / 150.0));
+        const tMin = Math.floor(sampleRate / 1200.0);
+        
+        const df = new Float32Array(tMax);
+        for (let tau = 1; tau < tMax; tau++) {
+            for (let i = 0; i < wLen; i++) {
+                const diff = this.timeData[i] - this.timeData[i + tau];
+                df[tau] += diff * diff;
+            }
+        }
+        
+        const cmndf = new Float32Array(tMax);
+        cmndf[0] = 1.0;
+        let runningSum = 0.0;
+        for (let tau = 1; tau < tMax; tau++) {
+            runningSum += df[tau];
+            cmndf[tau] = runningSum === 0 ? 1.0 : (df[tau] * tau) / runningSum;
+        }
+        
+        let tauEstimate = -1;
+        for (let tau = tMin; tau < tMax; tau++) {
+            if (cmndf[tau] < threshold) {
+                while (tau + 1 < tMax && cmndf[tau + 1] < cmndf[tau]) {
+                    tau++;
+                }
+                tauEstimate = tau;
+                break;
+            }
+        }
+        
+        if (tauEstimate === -1) {
+            let minVal = Infinity;
+            for (let tau = tMin; tau < tMax; tau++) {
+                if (cmndf[tau] < minVal) {
+                    minVal = cmndf[tau];
+                    tauEstimate = tau;
                 }
             }
         }
+        
+        let conf = 1.0 - cmndf[tauEstimate];
+        if (conf < 0) conf = 0;
 
-        if (pi === -1 || maxVal === -1) return { freq: -1, conf: 0, rms };
-
-        let fd = pi * hzPerBin;
-
-        if (pi > 0 && pi < fLen - 1) {
-            // Menggunakan Gaussian Interpolation pada log-magnitude (dB)
-            // Sangat presisi untuk fungsi Blackman Window bawaan Web Audio API
-            let a = this.freqData[pi - 1];
-            let b = this.freqData[pi];
-            let c = this.freqData[pi + 1];
-            let d = a - 2 * b + c;
-            let p = d !== 0 ? 0.5 * (a - c) / d : 0;
-            fd = (pi + p) * hzPerBin;
+        if (tauEstimate > 0 && tauEstimate < tMax - 1) {
+            const alpha = cmndf[tauEstimate - 1];
+            const beta = cmndf[tauEstimate];
+            const gamma = cmndf[tauEstimate + 1];
+            const denom = alpha - 2 * beta + gamma;
+            if (denom !== 0) {
+                tauEstimate += 0.5 * (alpha - gamma) / denom;
+            }
         }
+        
+        const freq = sampleRate / tauEstimate;
 
-        let conf = tot > 0 ? (maxVal * maxVal) / tot : 0;
-        return { freq: fd, conf, rms };
+        return { freq: freq, conf: conf, rms };
     }
 
     loop() {
@@ -382,6 +419,11 @@ class AudioEngine {
                     pn_no: n, pn_note: note, freq_detected: Math.round(smoothFreq * 1000) / 1000,
                     freq_ok: fok, freq_min: fmin, freq_max: fmax, verdict: v, reason: rsn
                 };
+
+                // Update variable I/O untuk dibaca oleh perangkat luar / Robot
+                // Jika nada tersebut NG, maka trigger 0 (Low) agar robot melakukan tuning.
+                // Jika OK, pastikan nilainya 1 (High).
+                window.ROBOT_TUNING_IO = (v === "NG") ? 0 : 1;
             }
         }
 
@@ -485,6 +527,8 @@ class App {
         // Model title di topbar (tidak ada badge/dropdown lagi)
         this.btnPower = document.getElementById('btn-power');
         this.btnLoadWav = document.getElementById('btn-load-wav');
+        this.btnUseMic = document.getElementById('btn-load-wav-mic');
+        this.wavCurrentStatus = document.getElementById('wav-current-status');
         this.loadWavStatus = document.getElementById('load-wav-status');
         this.loadWavList = document.getElementById('load-wav-list');
         this.sampleTabRow = document.getElementById('sample-tab-row');
@@ -567,6 +611,7 @@ class App {
 
         // Auto-Calibration
         this.btnLoadWav.addEventListener('click', () => this.openLoadWavModal());
+        this.btnUseMic.addEventListener('click', () => this.useMicInput());
         document.getElementById('btn-load-wav-close').addEventListener('click', () => this.closeLoadWavModal());
         this.sampleTabRow.addEventListener('click', (e) => {
             const btn = e.target.closest('.sample-tab-btn');
@@ -619,6 +664,15 @@ class App {
         this.openModal('modal-load-wav');
     }
 
+    useMicInput() {
+        this.engine.setWavBuffer(null);
+        this.loadWavStatus.textContent = 'Input diatur kembali ke microphone default.';
+        this.wavCurrentStatus.textContent = 'INPUT: MIC (live)';
+        this.closeLoadWavModal();
+        this.lblOvr.textContent = 'MIC INPUT READY';
+        this.ovrStatus.className = 'status-box waiting';
+    }
+
     closeLoadWavModal() {
         this.closeModal('modal-load-wav');
     }
@@ -630,16 +684,32 @@ class App {
         });
 
         this.loadWavStatus.textContent = `Memuat file WAV dari folder ${folder.toUpperCase()}...`;
+        this.wavCurrentStatus.textContent = `LOADING WAV: ${folder.toUpperCase()}...`;
         this.loadWavList.innerHTML = '<div class="sample-status">Loading...</div>';
 
         try {
             const response = await fetch(`../sample/${folder}/`);
             const text = await response.text();
             const doc = new DOMParser().parseFromString(text, 'text/html');
-            const files = Array.from(doc.querySelectorAll('a'))
-                .map(a => decodeURIComponent(a.getAttribute('href')))
-                .filter(href => href.toLowerCase().endsWith('.wav'))
-                .map(href => href.split('/').pop());
+            const entries = Array.from(doc.querySelectorAll('tr'))
+                .map(row => {
+                    const link = row.querySelector('a[href]');
+                    if (!link) return null;
+                    const href = decodeURIComponent(link.getAttribute('href'));
+                    if (!href.toLowerCase().endsWith('.wav')) return null;
+                    const cells = Array.from(row.querySelectorAll('td'));
+                    const modifiedText = cells[2]?.textContent.trim() || '';
+                    const modifiedAt = (() => {
+                        const m = modifiedText.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
+                        return m ? Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00`) : 0;
+                    })();
+                    const keyMatch = href.match(/key[^_]*\((\d+)\)/i);
+                    const keyNumber = keyMatch ? parseInt(keyMatch[1], 10) : Number.MAX_SAFE_INTEGER;
+                    return { file: href.split('/').pop(), modifiedAt, keyNumber };
+                })
+                .filter(Boolean)
+                .sort((a, b) => a.keyNumber - b.keyNumber || (b.modifiedAt || 0) - (a.modifiedAt || 0));
+            const files = entries.map(item => item.file);
 
             if (!files.length) {
                 this.loadWavList.innerHTML = '<div class="sample-status">Belum ada file WAV di folder ini.</div>';
@@ -680,6 +750,7 @@ class App {
 
             this.engine.setWavBuffer(decoded);
             this.loadWavStatus.textContent = `Loaded WAV: ${folder.toUpperCase()} / ${file}`;
+            this.wavCurrentStatus.textContent = `WAV: ${folder.toUpperCase()} / ${file}`;
             this.closeLoadWavModal();
             this.lblOvr.textContent = 'WAV INPUT READY';
             this.ovrStatus.className = 'status-box waiting';
