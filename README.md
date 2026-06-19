@@ -127,7 +127,7 @@ $$f = \frac{f_s}{\tau_{\text{interp}}}$$
 
 ---
 
-## 👶 Penjelasan Sederhana (Bahasa Bayi): Kenapa YIN Sangat Cerdas?
+## 👶 Penjelasan Sederhana: Kenapa YIN Sangat Cerdas?
 
 Bayangkan kamu punya sebuah gambar garis coret-coretan yang sangat berantakan dan rumit (ini adalah suara dari Pianika). Di dalam coret-coretan itu, ada gunung yang sangat tinggi dan bukit-bukit kecil.
 
