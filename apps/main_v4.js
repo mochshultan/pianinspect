@@ -300,6 +300,8 @@ class AudioEngine {
         const tMax = Math.min(wLen, Math.floor(sampleRate / 150.0));
         const tMin = Math.floor(sampleRate / 1200.0);
         
+        // --- LANGKAH 1 & 2: Windowing & Difference Function ---
+        // Catatan: Windowing disederhanakan (non-simetris) untuk efisiensi komputasi
         const df = new Float32Array(tMax);
         for (let tau = 1; tau < tMax; tau++) {
             for (let i = 0; i < wLen; i++) {
@@ -308,6 +310,7 @@ class AudioEngine {
             }
         }
         
+        // --- LANGKAH 3: Cumulative Mean Normalized Difference Function (CMNDF) ---
         const cmndf = new Float32Array(tMax);
         cmndf[0] = 1.0;
         let runningSum = 0.0;
@@ -316,6 +319,7 @@ class AudioEngine {
             cmndf[tau] = runningSum === 0 ? 1.0 : (df[tau] * tau) / runningSum;
         }
         
+        // --- LANGKAH 4: Absolute Threshold ---
         let tauEstimate = -1;
         for (let tau = tMin; tau < tMax; tau++) {
             if (cmndf[tau] < threshold) {
@@ -327,6 +331,7 @@ class AudioEngine {
             }
         }
         
+        // Fallback ke minimum global jika tidak ada yang memenuhi threshold
         if (tauEstimate === -1) {
             let minVal = Infinity;
             for (let tau = tMin; tau < tMax; tau++) {
@@ -340,6 +345,7 @@ class AudioEngine {
         let conf = 1.0 - cmndf[tauEstimate];
         if (conf < 0) conf = 0;
 
+        // --- LANGKAH 5: Parabolic Interpolation ---
         if (tauEstimate > 0 && tauEstimate < tMax - 1) {
             const alpha = cmndf[tauEstimate - 1];
             const beta = cmndf[tauEstimate];
@@ -350,6 +356,7 @@ class AudioEngine {
             }
         }
         
+        // Konversi ke frekuensi
         const freq = sampleRate / tauEstimate;
 
         return { freq: freq, conf: conf, rms };
@@ -360,16 +367,25 @@ class AudioEngine {
 
         let { freq: rawFreq, conf, rms } = this.estimateFreq();
 
-        // --- SLIDING MEDIAN FILTER UNTUK STABILITAS YIN ---
+        // --- LANGKAH 6 YIN: BEST LOCAL ESTIMATE ---
+        // Menggantikan Sliding Median Filter dengan implementasi sesuai paper YIN,
+        // yaitu memilih estimasi dengan nilai d' terendah (confidence tertinggi)
+        // dalam jendela waktu (21 frame).
         let freq = rawFreq;
         if (rawFreq > 0) {
             if (!this.rawFreqHist) this.rawFreqHist = [];
-            this.rawFreqHist.push(rawFreq);
-            // Simpan 21 frame terakhir (~350ms) untuk menyapu bersih noise panjang
+            this.rawFreqHist.push({ freq: rawFreq, conf: conf });
+            // Simpan 21 frame terakhir (~350ms)
             if (this.rawFreqHist.length > 21) this.rawFreqHist.shift(); 
             
-            let slice = [...this.rawFreqHist].sort((a,b) => a - b);
-            freq = slice[Math.floor(slice.length / 2)]; // Ambil nilai tengah (Median)
+            // Cari frame dengan confidence tertinggi (kualitas terbaik) di dalam window
+            let bestFrame = this.rawFreqHist[0];
+            for (let i = 1; i < this.rawFreqHist.length; i++) {
+                if (this.rawFreqHist[i].conf > bestFrame.conf) {
+                    bestFrame = this.rawFreqHist[i];
+                }
+            }
+            freq = bestFrame.freq;
         } else {
             this.rawFreqHist = [];
         }

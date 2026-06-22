@@ -102,7 +102,7 @@ Aplikasi ini menggunakan **Algoritma Autokorelasi YIN** alih-alih *Fast Fourier 
 
 Baik input dari **Live Mic** maupun rekaman **File WAV**, keduanya diproses menggunakan alur sinyal yang **identik**. Kedua sumber sinyal tersebut akan melewati filter *High-Pass* (150Hz) dan *Low-Pass* (1200Hz) terlebih dahulu untuk membuang noise, kemudian diteruskan ke buffer `AnalyserNode` sebelum dieksekusi secara *real-time* oleh algoritma YIN.
 
-Algoritma YIN memproses buffer audio dalam 5 langkah matematika yang terstruktur:
+Algoritma YIN memproses buffer audio dalam 6 langkah matematika yang terstruktur:
 
 ### 1. Fungsi Selisih (*Difference Function*)
 Alih-alih mengandalkan autokorelasi standar, YIN menghitung selisih kuadrat antara sinyal dan versi sinyal yang digeser untuk setiap kemungkinan periode jeda/lag ($\tau$).
@@ -124,6 +124,9 @@ $$\tau_{\text{interp}} = \tau + \frac{\alpha - \gamma}{2(\alpha - 2\beta + \gamm
 ### 5. Konversi Frekuensi (*Frequency Conversion*)
 Terakhir, periode gelombang yang telah diinterpolasi ($\tau_{\text{interp}}$) dikonversi menjadi frekuensi fundamental riil ($f$).
 $$f = \frac{f_s}{\tau_{\text{interp}}}$$
+
+### 6. Estimasi Lokal Terbaik (*Best Local Estimate*)
+Untuk menjaga kestabilan dari hasil konversi frekuensi, algoritma meninjau jendela waktu tertentu (misalnya 21 frame terakhir) dan secara konsisten memilih estimasi frekuensi dengan tingkat keyakinan (*confidence*) tertinggi (nilai $d'$ terendah). Ini mengatasi anomali temporal tanpa mengorbankan kualitas sinyal.
 
 ---
 
@@ -162,10 +165,10 @@ Aplikasi ini dilengkapi dengan beberapa parameter bawaan di `apps/main_v4.js` ya
    - **Fungsi:** Menentukan seberapa panjang blok data audio yang diambil untuk satu kali hitungan YIN.
    - **Tuning:** Angka `8192` memberikan jendela waktu yang sangat panjang (~170 milidetik), sehingga deteksi nada (terutama nada rendah) sangat tangguh. Turunkan ke `4096` atau `2048` hanya jika terjadi *lag* parah pada PC industri yang sudah usang.
 
-2. **`Sliding Median Filter` (Penyaring Noise Mentah)**
+2. **`Best Local Estimate` (Penyaring Kualitas YIN Langkah 6)**
    - **Lokasi:** Di dalam metode `loop()`, array `this.rawFreqHist`
-   - **Fungsi:** Menyimpan memori frekuensi mentah yang terdeteksi secara beruntun dan selalu memilih *nilai tengahnya* (Median).
-   - **Tuning:** Di-set menahan riwayat **21 frame** (~350ms). Jika ada *noise* hembusan napas keras mendadak selama < 150ms, filter ini otomatis mengabaikannya (*outlier rejection*). Perbesar ukuran antrean (misal 31) jika lingkungan sangat berisik.
+   - **Fungsi:** Menyimpan memori frekuensi dan tingkat keyakinan (*confidence*) yang terdeteksi secara beruntun, lalu selalu memilih frekuensi dengan *confidence* tertinggi (kualitas terbaik) dalam jendela waktu tersebut sesuai spesifikasi asli paper YIN.
+   - **Tuning:** Di-set menahan riwayat **21 frame** (~350ms). Jika ada *noise* dengan tingkat keyakinan rendah mendadak selama < 150ms, filter ini otomatis mengabaikannya karena kalah saing dengan frame yang memiliki *confidence* tinggi. Perbesar ukuran antrean (misal 31) jika diperlukan untuk menstabilkan nada.
 
 3. **`MATCH_CENTS` (Radius Kuncian Awal Nada)**
    - **Lokasi:** `const MATCH_CENTS = 40;`
