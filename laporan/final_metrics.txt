@@ -1,0 +1,6 @@
+Total Samples: 64
+Accuracy: 0.6875
+Precision: 0.7308
+Recall: 0.5938
+F1 Score: 0.6552
+TP: 19, FN: 13, FP: 7, TN: 25

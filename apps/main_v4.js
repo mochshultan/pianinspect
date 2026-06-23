@@ -1316,7 +1316,7 @@ class App {
 
         // ── DOM Overlay ──
         const nc = state === 'idle' ? '#6B7280' :
-            state === 'inrange' ? '#F59E0B' :
+            state === 'inrange' ? '#10B981' :
                 state === 'perfect' ? '#10B981' : '#DC2626';
 
         this.dNodeTxt.innerText = this.dNote;

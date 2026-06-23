@@ -616,8 +616,8 @@ body::after {
 }
 
 .verdict-hero.state-inrange {
-  background: var(--warning);
-  border-color: var(--warning-dk);
+  background: var(--success);
+  border-color: var(--success-dk);
 }
 
 .verdict-hero.state-perfect {

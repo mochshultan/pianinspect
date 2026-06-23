@@ -421,7 +421,7 @@
         .tuts-grid {
             display: grid;
             grid-template-columns: repeat(8, 1fr);
-            gap: 0.5rem;
+            gap: 0.9rem; /* Diperbesar agar jarak antartombol lebih renggang */
         }
 
         .tuts-btn {
@@ -429,7 +429,7 @@
             color: var(--text-main);
             border: 2px solid var(--border-main);
             border-radius: var(--radius-sm);
-            padding: 0.5rem 0.5rem;
+            padding: 0.8rem 0.5rem; /* Padding vertikal diperbesar agar tombol lebih tinggi */
             font-size: 0.9rem;
             font-weight: 800;
             font-family: 'Roboto Mono', monospace;
@@ -687,7 +687,7 @@
                     <div class="box-header"
                         style="display: flex; justify-content: space-between; align-items: center; border-bottom: none; margin-bottom: 0;">
                         <span>AUDIO FILES</span>
-                        <div style="display: flex; gap: 0.5rem;">
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
                             <button class="btn btn-amber" id="btn-el3"
                                 style="padding: 0.3rem 0.8rem; font-size: 0.7rem; width: auto; margin-bottom: 0;">EL
                                 3</button>
@@ -700,7 +700,8 @@
                         <table>
                             <thead>
                                 <tr>
-                                    <th>FILENAME</th>
+                                    <th id="th-filename" style="cursor: pointer; user-select: none;">FILENAME <span id="icon-filename" style="font-size: 0.8em; margin-left: 0.3rem;"></span></th>
+                                    <th id="th-time" style="width: 130px; text-align: center; cursor: pointer; user-select: none;">MODIFIED <span id="icon-time" style="font-size: 0.8em; margin-left: 0.3rem;">▼</span></th>
                                     <th style="width: 70px; text-align: center;">DUR</th>
                                     <th style="width: 80px; text-align: center;">ACTION</th>
                                 </tr>
@@ -1123,12 +1124,40 @@
 
         function setSaveStatus(status) {
             selectedSaveStatus = status;
-            btnStatusOk.classList.toggle('btn-green', status === 'OK');
-            btnStatusOk.classList.toggle('btn-red', status !== 'OK');
-            btnStatusNg.classList.toggle('btn-red', status === 'NG');
-            btnStatusNg.classList.toggle('btn-green', status !== 'NG');
-            btnStatusOk.style.opacity = status === 'OK' ? '1' : '0.85';
-            btnStatusNg.style.opacity = status === 'NG' ? '1' : '0.85';
+            
+            if (status === 'OK') {
+                btnStatusOk.className = 'btn btn-green';
+                btnStatusOk.style.background = '';
+                btnStatusOk.style.color = '';
+                btnStatusOk.style.borderColor = '';
+                btnStatusOk.style.opacity = '1';
+                btnStatusOk.style.boxShadow = '3px 3px 0px #000';
+                btnStatusOk.style.transform = 'none';
+                
+                btnStatusNg.className = 'btn';
+                btnStatusNg.style.background = 'var(--surface-light)';
+                btnStatusNg.style.color = 'var(--text-dim)';
+                btnStatusNg.style.borderColor = 'var(--border-main)';
+                btnStatusNg.style.opacity = '0.5';
+                btnStatusNg.style.boxShadow = 'none';
+                btnStatusNg.style.transform = 'translate(3px, 3px)';
+            } else {
+                btnStatusNg.className = 'btn btn-red';
+                btnStatusNg.style.background = '';
+                btnStatusNg.style.color = '';
+                btnStatusNg.style.borderColor = '';
+                btnStatusNg.style.opacity = '1';
+                btnStatusNg.style.boxShadow = '3px 3px 0px #000';
+                btnStatusNg.style.transform = 'none';
+                
+                btnStatusOk.className = 'btn';
+                btnStatusOk.style.background = 'var(--surface-light)';
+                btnStatusOk.style.color = 'var(--text-dim)';
+                btnStatusOk.style.borderColor = 'var(--border-main)';
+                btnStatusOk.style.opacity = '0.5';
+                btnStatusOk.style.boxShadow = 'none';
+                btnStatusOk.style.transform = 'translate(3px, 3px)';
+            }
         }
 
         btnStatusOk.addEventListener('click', () => setSaveStatus('OK'));
@@ -1147,14 +1176,6 @@
             const folder = modalFolder.value;
             const status = selectedSaveStatus || 'OK';
             const filename = `${folder}_key${tutsId}_${status}.wav`;
-
-            if (currentFolder === folder) {
-                if (currentFiles.includes(filename)) {
-                    if (!confirm(`File ${filename} already exists in ${folder.toUpperCase()}. Proceed to save and potentially overwrite?`)) {
-                        return;
-                    }
-                }
-            }
 
             // --- XAMPP / PHP AUTO-SAVE LOGIC ---
             try {
@@ -1206,10 +1227,57 @@
         const btnEl3 = document.getElementById('btn-el3');
         const btnEl4 = document.getElementById('btn-el4');
         const fileListBody = document.getElementById('file-list-body');
+        
+        const thFilename = document.getElementById('th-filename');
+        const thTime = document.getElementById('th-time');
+        const iconFilename = document.getElementById('icon-filename');
+        const iconTime = document.getElementById('icon-time');
+        
         let currentFolder = 'el3';
-        let currentFiles = [];
+        let currentEntries = [];
         let currentlyPlayingAudio = null;
         let currentlyPlayingBtn = null;
+
+        let sortCol = 'time'; // 'name' or 'time'
+        let sortAsc = false;
+
+        thFilename.addEventListener('click', () => {
+            if (sortCol === 'name') {
+                sortAsc = !sortAsc;
+            } else {
+                sortCol = 'name';
+                sortAsc = true;
+            }
+            updateSortIcons();
+            applySort();
+        });
+
+        thTime.addEventListener('click', () => {
+            if (sortCol === 'time') {
+                sortAsc = !sortAsc;
+            } else {
+                sortCol = 'time';
+                sortAsc = false;
+            }
+            updateSortIcons();
+            applySort();
+        });
+
+        function updateSortIcons() {
+            iconFilename.textContent = sortCol === 'name' ? (sortAsc ? '▲' : '▼') : '';
+            iconTime.textContent = sortCol === 'time' ? (sortAsc ? '▲' : '▼') : '';
+        }
+
+        function applySort() {
+            currentEntries.sort((a, b) => {
+                if (sortCol === 'time') {
+                    return sortAsc ? (a.modifiedAt || 0) - (b.modifiedAt || 0) : (b.modifiedAt || 0) - (a.modifiedAt || 0);
+                } else {
+                    return sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+                }
+            });
+            renderFiles();
+        }
 
         async function loadFiles(folder) {
             currentFolder = folder;
@@ -1246,12 +1314,10 @@
                             modifiedAt
                         };
                     })
-                    .filter(Boolean)
-                    .sort((a, b) => (b.modifiedAt || 0) - (a.modifiedAt || 0));
+                    .filter(Boolean);
 
-                currentFiles = entries.map(item => item.name);
-
-                renderFiles();
+                currentEntries = entries;
+                applySort();
             } catch (e) {
                 console.error(e);
                 fileListBody.innerHTML = '<tr><td colspan="2" style="text-align: center; color: var(--danger);">Failed to load files</td></tr>';
@@ -1271,14 +1337,26 @@
 
         function renderFiles() {
             fileListBody.innerHTML = '';
-            if (currentFiles.length === 0) {
-                fileListBody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-dim);">No files found</td></tr>';
+            if (currentEntries.length === 0) {
+                fileListBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-dim);">No files found</td></tr>';
                 return;
             }
-            currentFiles.forEach(file => {
+            currentEntries.forEach(fileObj => {
+                const file = fileObj.name;
                 const tr = document.createElement('tr');
                 const tdName = document.createElement('td');
                 tdName.textContent = file;
+                
+                const tdTime = document.createElement('td');
+                tdTime.style.textAlign = 'center';
+                tdTime.style.fontFamily = 'monospace';
+                tdTime.style.fontSize = '0.75rem';
+                if (fileObj.modifiedAt) {
+                    const d = new Date(fileObj.modifiedAt);
+                    tdTime.textContent = d.toLocaleString('id-ID', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}).replace(',', '');
+                } else {
+                    tdTime.textContent = '-';
+                }
 
                 const tdDur = document.createElement('td');
                 tdDur.style.textAlign = 'center';
@@ -1302,6 +1380,7 @@
                 tdAction.appendChild(playBtn);
 
                 tr.appendChild(tdName);
+                tr.appendChild(tdTime);
                 tr.appendChild(tdDur);
                 tr.appendChild(tdAction);
                 fileListBody.appendChild(tr);

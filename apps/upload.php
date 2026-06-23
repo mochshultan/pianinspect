@@ -23,6 +23,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         $targetFile = $targetDir . $filename;
         
+        // Auto-rename (akhiran _1, _2, dst) jika file sudah ada
+        $path_parts = pathinfo($targetFile);
+        $base = $path_parts['filename'];
+        $ext = isset($path_parts['extension']) ? '.' . $path_parts['extension'] : '';
+        
+        $counter = 1;
+        while (file_exists($targetFile)) {
+            $targetFile = $targetDir . $base . '_' . $counter . $ext;
+            $counter++;
+        }
+        
         // Pindahkan file dari penyimpanan sementara (tmp) ke jalur tujuan
         if (move_uploaded_file($_FILES['audio']['tmp_name'], $targetFile)) {
             echo "Success: File saved to " . $targetFile;
